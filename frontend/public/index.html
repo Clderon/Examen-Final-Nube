@@ -10,9 +10,13 @@
 
   <script>
     let token = "";
+    // Detectar automáticamente el host desde donde se carga la página
+    const HOST = window.location.hostname || 'localhost';
+    const AUTH_URL = `http://${HOST}:3000`;
+    const ORDER_URL = `http://${HOST}:3001`;
 
     async function login() {
-      const res = await fetch("http://localhost:3000/login", {
+      const res = await fetch(`${AUTH_URL}/login`, {
         method: "POST"
       });
       const data = await res.json();
@@ -21,7 +25,7 @@
     }
 
     async function order() {
-      await fetch("http://localhost:3001/orders", {
+      await fetch(`${ORDER_URL}/orders`, {
         method: "POST",
         headers: { "Authorization": "Bearer " + token }
       });
