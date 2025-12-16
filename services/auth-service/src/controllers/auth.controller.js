@@ -190,7 +190,6 @@ module.exports = {
   register,
   login,
   getProfile,
-  getAllUsers,
-  getUsers // Para uso en otros módulos
+  getAllUsers
 };
 
