@@ -72,39 +72,82 @@
 
     <!-- Main App Section -->
     <section id="appSection" class="app-section" style="display: none;">
-      <!-- Create Order Section -->
-      <div class="card">
-        <h2>➕ Crear Nuevo Pedido</h2>
-        <form onsubmit="handleCreateOrder(event)" class="order-form">
-          <div class="form-group">
-            <label for="orderProduct">Producto:</label>
-            <input type="text" id="orderProduct" required placeholder="Ej: Laptop Dell XPS 15">
-          </div>
-          <div class="form-row">
-            <div class="form-group">
-              <label for="orderQuantity">Cantidad:</label>
-              <input type="number" id="orderQuantity" required min="1" value="1">
-            </div>
-            <div class="form-group">
-              <label for="orderPrice">Precio:</label>
-              <input type="number" id="orderPrice" required min="0" step="0.01" placeholder="0.00">
-            </div>
-          </div>
-          <button type="submit" class="btn btn-primary btn-block">Crear Pedido</button>
-        </form>
+      <!-- Navigation Tabs -->
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="showTab('dashboard')">📊 Dashboard</button>
+        <button class="nav-tab" onclick="showTab('orders')">📦 Pedidos</button>
+        <button class="nav-tab" onclick="showTab('profile')">👤 Perfil</button>
       </div>
 
-      <!-- Orders List Section -->
-      <div class="card">
-        <div class="card-header">
-          <h2>📦 Mis Pedidos</h2>
-          <button onclick="loadOrders()" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
+      <!-- Dashboard Tab -->
+      <div id="dashboardTab" class="tab-content active">
+        <!-- Statistics -->
+        <div class="card">
+          <h2>📊 Estadísticas</h2>
+          <div id="statsContainer" class="stats-grid">
+            <p class="loading">Cargando estadísticas...</p>
+          </div>
         </div>
-        <div id="ordersList" class="orders-list">
-          <p class="loading">Cargando pedidos...</p>
+
+        <!-- Create Order Section -->
+        <div class="card">
+          <h2>➕ Crear Nuevo Pedido</h2>
+          <form onsubmit="handleCreateOrder(event)" class="order-form">
+            <div class="form-group">
+              <label for="orderProduct">Producto:</label>
+              <input type="text" id="orderProduct" required placeholder="Ej: Laptop Dell XPS 15">
+            </div>
+            <div class="form-group">
+              <label for="orderDescription">Descripción (opcional):</label>
+              <textarea id="orderDescription" rows="2" placeholder="Descripción adicional del producto"></textarea>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="orderQuantity">Cantidad:</label>
+                <input type="number" id="orderQuantity" required min="1" value="1">
+              </div>
+              <div class="form-group">
+                <label for="orderPrice">Precio Unitario:</label>
+                <input type="number" id="orderPrice" required min="0" step="0.01" placeholder="0.00">
+              </div>
+            </div>
+            <button type="submit" class="btn btn-primary btn-block">Crear Pedido</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Orders Tab -->
+      <div id="ordersTab" class="tab-content">
+        <div class="card">
+          <div class="card-header">
+            <h2>📦 Mis Pedidos</h2>
+            <button onclick="loadOrders()" class="btn btn-secondary btn-sm">🔄 Actualizar</button>
+          </div>
+          <div id="ordersList" class="orders-list">
+            <p class="loading">Cargando pedidos...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Profile Tab -->
+      <div id="profileTab" class="tab-content">
+        <div class="card">
+          <h2>👤 Mi Perfil</h2>
+          <div id="profileContainer">
+            <p class="loading">Cargando perfil...</p>
+          </div>
         </div>
       </div>
     </section>
+
+    <!-- Modal para detalles de pedido -->
+    <div id="orderModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeOrderModal()">&times;</span>
+        <h2>Detalles del Pedido</h2>
+        <div id="orderModalBody"></div>
+      </div>
+    </div>
 
     <!-- Status Messages -->
     <div id="statusMessage" class="status-message"></div>
