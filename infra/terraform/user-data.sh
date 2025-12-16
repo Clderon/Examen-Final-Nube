@@ -99,10 +99,6 @@ echo "Contenido de docker-compose.yml:"
 head -20 docker-compose.yml
 
 echo ""
-echo "Construyendo imágenes sin caché..."
-sudo -u ubuntu docker-compose build --no-cache 2>&1
-
-echo ""
 echo "Iniciando servicios..."
 sudo -u ubuntu docker-compose up -d 2>&1
 
