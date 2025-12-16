@@ -1,5 +1,5 @@
 const { sendToQueue } = require("../messaging/rabbitmq");
-const pool = require("../database/db");
+const { pool, isDbReady } = require("../database/db");
 
 // GET /orders - Listar todos los pedidos
 const getAllOrders = async (req, res) => {
@@ -45,6 +45,10 @@ const getAllOrders = async (req, res) => {
 
 // GET /orders/:id - Obtener un pedido por ID
 const getOrderById = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const orderId = parseInt(req.params.id);
 
@@ -88,6 +92,10 @@ const getOrderById = async (req, res) => {
 
 // POST /orders - Crear un nuevo pedido
 const createOrder = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const { product, quantity, price, description } = req.body;
     
@@ -171,6 +179,10 @@ const createOrder = async (req, res) => {
 
 // PUT /orders/:id/status - Actualizar estado de un pedido
 const updateOrderStatus = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const orderId = parseInt(req.params.id);
     const { status } = req.body;
@@ -252,6 +264,10 @@ const updateOrderStatus = async (req, res) => {
 
 // DELETE /orders/:id - Eliminar un pedido
 const deleteOrder = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const orderId = parseInt(req.params.id);
 
@@ -286,6 +302,10 @@ const deleteOrder = async (req, res) => {
 
 // GET /orders/stats - Obtener estadísticas de pedidos
 const getOrderStats = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const userRole = req.user.role;
     const userId = req.user.userId;

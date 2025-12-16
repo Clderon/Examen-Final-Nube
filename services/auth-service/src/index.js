@@ -11,9 +11,14 @@ const PORT = process.env.PORT || 3000;
 // Rutas
 app.use("/", authRoutes);
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "OK", service: "Auth Service" });
+// Health check mejorado
+app.get("/health", async (req, res) => {
+  const { isDbReady } = require("./database/db");
+  if (isDbReady()) {
+    res.json({ status: "OK", service: "Auth Service", database: "connected" });
+  } else {
+    res.status(503).json({ status: "NOT_READY", service: "Auth Service", database: "connecting" });
+  }
 });
 
 // Endpoint raíz con documentación

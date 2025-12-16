@@ -29,9 +29,14 @@ app.get("/", (req, res) => {
   });
 });
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "OK", service: "Order Service" });
+// Health check mejorado
+app.get("/health", async (req, res) => {
+  const { isDbReady } = require("./database/db");
+  if (isDbReady()) {
+    res.json({ status: "OK", service: "Order Service", database: "connected" });
+  } else {
+    res.status(503).json({ status: "NOT_READY", service: "Order Service", database: "connecting" });
+  }
 });
 
 app.listen(PORT, "0.0.0.0", () => {

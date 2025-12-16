@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const pool = require("../database/db");
+const { pool, isDbReady } = require("../database/db");
 
 const SECRET = process.env.JWT_SECRET || "secret123";
 
@@ -15,6 +15,10 @@ function comparePassword(password, hashedPassword) {
 
 // POST /register - Registrar nuevo usuario
 const register = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const { name, email, password } = req.body;
     
@@ -74,6 +78,10 @@ const register = async (req, res) => {
 
 // POST /login - Iniciar sesión
 const login = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const { email, password } = req.body;
     
@@ -119,6 +127,10 @@ const login = async (req, res) => {
 
 // GET /profile - Obtener perfil del usuario actual
 const getProfile = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const [users] = await pool.query(
       'SELECT id, name, email, role, created_at FROM users WHERE id = ?',
@@ -147,6 +159,10 @@ const getProfile = async (req, res) => {
 
 // GET /users - Listar todos los usuarios (solo admin)
 const getAllUsers = async (req, res) => {
+  if (!isDbReady()) {
+    return res.status(503).json({ message: "Servicio no disponible. Base de datos no está lista aún." });
+  }
+  
   try {
     const [users] = await pool.query(
       'SELECT id, name, email, role, created_at FROM users ORDER BY created_at DESC'
