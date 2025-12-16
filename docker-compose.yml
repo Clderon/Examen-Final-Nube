@@ -1,6 +1,27 @@
 version: "3.9"
 
 services:
+  mysql:
+    image: mysql:8.0
+    container_name: mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass123
+      MYSQL_DATABASE: usersdb
+      MYSQL_USER: authuser
+      MYSQL_PASSWORD: authpass123
+    volumes:
+      - mysql-auth-data:/var/lib/mysql
+      - ./services/auth-service/src/database/init-complete.sql:/docker-entrypoint-initdb.d/00-init-databases.sql
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-prootpass123"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   rabbitmq:
     image: rabbitmq:3-management
     container_name: rabbitmq
@@ -15,8 +36,17 @@ services:
     container_name: auth-service
     ports:
       - "3000:3000"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: usersdb
+      DB_USER: authuser
+      DB_PASSWORD: authpass123
     depends_on:
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - app-network
 
@@ -25,8 +55,17 @@ services:
     container_name: order-service
     ports:
       - "3001:3001"
+    environment:
+      DB_HOST: mysql
+      DB_PORT: 3306
+      DB_NAME: ordersdb
+      DB_USER: orderuser
+      DB_PASSWORD: orderpass123
     depends_on:
-      - rabbitmq
+      mysql:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_started
     networks:
       - app-network
 
@@ -52,3 +91,6 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  mysql-auth-data:

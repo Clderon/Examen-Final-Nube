@@ -1,29 +1,42 @@
 const { sendToQueue } = require("../messaging/rabbitmq");
-
-// Almacenamiento en memoria (en producción usar una base de datos)
-const orders = [];
-let orderIdCounter = 1;
+const pool = require("../database/db");
 
 // GET /orders - Listar todos los pedidos
-const getAllOrders = (req, res) => {
+const getAllOrders = async (req, res) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.userId;
 
-    let filteredOrders = orders;
+    let query = 'SELECT * FROM orders';
+    let params = [];
 
     // Si no es admin, solo ver sus propios pedidos
     if (userRole !== 'admin') {
-      filteredOrders = orders.filter(order => order.userId === userId);
+      query += ' WHERE user_id = ?';
+      params.push(userId);
     }
 
-    // Ordenar por fecha más reciente primero
-    filteredOrders = [...filteredOrders].sort((a, b) => 
-      new Date(b.createdAt) - new Date(a.createdAt)
-    );
+    query += ' ORDER BY created_at DESC';
 
-    console.log(`📋 Listando ${filteredOrders.length} pedidos para usuario ${req.user.email}`);
-    res.json(filteredOrders);
+    const [orders] = await pool.query(query, params);
+
+    // Formatear resultados para mantener compatibilidad con el frontend
+    const formattedOrders = orders.map(order => ({
+      id: order.id,
+      product: order.product,
+      description: order.description || '',
+      quantity: order.quantity,
+      price: parseFloat(order.price),
+      total: parseFloat(order.total),
+      status: order.status,
+      userId: order.user_id,
+      userEmail: order.user_email,
+      createdAt: order.created_at.toISOString(),
+      updatedAt: order.updated_at ? order.updated_at.toISOString() : null
+    }));
+
+    console.log(`📋 Listando ${formattedOrders.length} pedidos para usuario ${req.user.email}`);
+    res.json(formattedOrders);
   } catch (error) {
     console.error("Error al listar pedidos:", error);
     res.status(500).json({ error: "Error al obtener pedidos", message: error.message });
@@ -31,21 +44,42 @@ const getAllOrders = (req, res) => {
 };
 
 // GET /orders/:id - Obtener un pedido por ID
-const getOrderById = (req, res) => {
+const getOrderById = async (req, res) => {
   try {
     const orderId = parseInt(req.params.id);
-    const order = orders.find(o => o.id === orderId);
 
-    if (!order) {
+    const [orders] = await pool.query(
+      'SELECT * FROM orders WHERE id = ?',
+      [orderId]
+    );
+
+    if (orders.length === 0) {
       return res.status(404).json({ message: "Pedido no encontrado" });
     }
 
+    const order = orders[0];
+
     // Verificar permisos: admin puede ver todos, usuarios solo los suyos
-    if (req.user.role !== 'admin' && order.userId !== req.user.userId) {
+    if (req.user.role !== 'admin' && order.user_id !== req.user.userId) {
       return res.status(403).json({ message: "No tienes permisos para ver este pedido" });
     }
 
-    res.json(order);
+    // Formatear resultado
+    const formattedOrder = {
+      id: order.id,
+      product: order.product,
+      description: order.description || '',
+      quantity: order.quantity,
+      price: parseFloat(order.price),
+      total: parseFloat(order.total),
+      status: order.status,
+      userId: order.user_id,
+      userEmail: order.user_email,
+      createdAt: order.created_at.toISOString(),
+      updatedAt: order.updated_at ? order.updated_at.toISOString() : null
+    };
+
+    res.json(formattedOrder);
   } catch (error) {
     console.error("Error al obtener pedido:", error);
     res.status(500).json({ error: "Error al obtener pedido", message: error.message });
@@ -74,23 +108,44 @@ const createOrder = async (req, res) => {
 
     console.log("📦 Recibida solicitud de pedido:", { product, quantity, price });
 
-    // Crear el pedido
+    const total = parseFloat((quantity * price).toFixed(2));
+
+    // Insertar pedido en la base de datos
+    const [result] = await pool.query(
+      `INSERT INTO orders (product, description, quantity, price, total, status, user_id, user_email) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        product,
+        description || null,
+        parseInt(quantity),
+        parseFloat(price),
+        total,
+        'pending',
+        req.user.userId,
+        req.user.email
+      ]
+    );
+
+    const orderId = result.insertId;
+
+    // Obtener el pedido creado para devolverlo
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    const orderDb = orders[0];
+
     const order = {
-      id: orderIdCounter++,
-      product,
-      description: description || '',
-      quantity: parseInt(quantity),
-      price: parseFloat(price),
-      total: parseFloat((quantity * price).toFixed(2)),
-      status: "pending",
-      userId: req.user.userId,
-      userEmail: req.user.email,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      id: orderDb.id,
+      product: orderDb.product,
+      description: orderDb.description || '',
+      quantity: orderDb.quantity,
+      price: parseFloat(orderDb.price),
+      total: parseFloat(orderDb.total),
+      status: orderDb.status,
+      userId: orderDb.user_id,
+      userEmail: orderDb.user_email,
+      createdAt: orderDb.created_at.toISOString(),
+      updatedAt: orderDb.updated_at ? orderDb.updated_at.toISOString() : null
     };
 
-    // Guardar en memoria
-    orders.push(order);
     console.log(`✅ Pedido #${order.id} creado y guardado`);
 
     // Enviar a RabbitMQ para procesamiento (no bloqueante)
@@ -128,16 +183,18 @@ const updateOrderStatus = async (req, res) => {
       });
     }
 
-    const orderIndex = orders.findIndex(o => o.id === orderId);
-    if (orderIndex === -1) {
+    // Obtener el pedido actual
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    
+    if (orders.length === 0) {
       return res.status(404).json({ message: "Pedido no encontrado" });
     }
 
-    const order = orders[orderIndex];
+    const order = orders[0];
 
     // Solo admin puede cambiar estados, o usuarios pueden cancelar sus propios pedidos pendientes
     if (req.user.role !== 'admin') {
-      if (status !== 'cancelled' || order.userId !== req.user.userId || order.status !== 'pending') {
+      if (status !== 'cancelled' || order.user_id !== req.user.userId || order.status !== 'pending') {
         return res.status(403).json({ 
           message: "No tienes permisos para actualizar este pedido" 
         });
@@ -145,17 +202,36 @@ const updateOrderStatus = async (req, res) => {
     }
 
     const oldStatus = order.status;
-    orders[orderIndex] = {
-      ...order,
-      status,
-      updatedAt: new Date().toISOString()
+
+    // Actualizar estado en la base de datos
+    await pool.query(
+      'UPDATE orders SET status = ?, updated_at = NOW() WHERE id = ?',
+      [status, orderId]
+    );
+
+    // Obtener el pedido actualizado
+    const [updatedOrders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+    const updatedOrder = updatedOrders[0];
+
+    const formattedOrder = {
+      id: updatedOrder.id,
+      product: updatedOrder.product,
+      description: updatedOrder.description || '',
+      quantity: updatedOrder.quantity,
+      price: parseFloat(updatedOrder.price),
+      total: parseFloat(updatedOrder.total),
+      status: updatedOrder.status,
+      userId: updatedOrder.user_id,
+      userEmail: updatedOrder.user_email,
+      createdAt: updatedOrder.created_at.toISOString(),
+      updatedAt: updatedOrder.updated_at ? updatedOrder.updated_at.toISOString() : null
     };
 
     console.log(`✅ Pedido #${orderId} actualizado: ${oldStatus} -> ${status}`);
 
     // Enviar notificación a RabbitMQ
     sendToQueue("orders", {
-      orderId: order.id,
+      orderId: formattedOrder.id,
       action: "status_updated",
       oldStatus,
       newStatus: status,
@@ -166,7 +242,7 @@ const updateOrderStatus = async (req, res) => {
 
     res.json({
       message: "Estado del pedido actualizado",
-      order: orders[orderIndex]
+      order: formattedOrder
     });
   } catch (error) {
     console.error("Error al actualizar pedido:", error);
@@ -175,27 +251,30 @@ const updateOrderStatus = async (req, res) => {
 };
 
 // DELETE /orders/:id - Eliminar un pedido
-const deleteOrder = (req, res) => {
+const deleteOrder = async (req, res) => {
   try {
     const orderId = parseInt(req.params.id);
-    const orderIndex = orders.findIndex(o => o.id === orderId);
 
-    if (orderIndex === -1) {
+    // Obtener el pedido primero para verificar permisos
+    const [orders] = await pool.query('SELECT * FROM orders WHERE id = ?', [orderId]);
+
+    if (orders.length === 0) {
       return res.status(404).json({ message: "Pedido no encontrado" });
     }
 
-    const order = orders[orderIndex];
+    const order = orders[0];
 
     // Solo admin puede eliminar, o usuarios pueden eliminar sus propios pedidos pendientes
     if (req.user.role !== 'admin') {
-      if (order.userId !== req.user.userId || order.status !== 'pending') {
+      if (order.user_id !== req.user.userId || order.status !== 'pending') {
         return res.status(403).json({ 
           message: "Solo puedes eliminar tus propios pedidos pendientes" 
         });
       }
     }
 
-    orders.splice(orderIndex, 1);
+    // Eliminar el pedido
+    await pool.query('DELETE FROM orders WHERE id = ?', [orderId]);
     console.log(`✅ Pedido #${orderId} eliminado`);
 
     res.json({ message: "Pedido eliminado exitosamente" });
@@ -205,29 +284,60 @@ const deleteOrder = (req, res) => {
   }
 };
 
-// GET /orders/stats/stats - Obtener estadísticas de pedidos
-const getOrderStats = (req, res) => {
+// GET /orders/stats - Obtener estadísticas de pedidos
+const getOrderStats = async (req, res) => {
   try {
     const userRole = req.user.role;
     const userId = req.user.userId;
 
-    let filteredOrders = orders;
+    let whereClause = '';
+    let params = [];
+
     if (userRole !== 'admin') {
-      filteredOrders = orders.filter(order => order.userId === userId);
+      whereClause = 'WHERE user_id = ?';
+      params.push(userId);
     }
 
+    // Obtener total de pedidos
+    const [totalResult] = await pool.query(
+      `SELECT COUNT(*) as total FROM orders ${whereClause}`,
+      params
+    );
+    const total = totalResult[0].total;
+
+    // Obtener pedidos por estado
+    const [statusResult] = await pool.query(
+      `SELECT status, COUNT(*) as count FROM orders ${whereClause} GROUP BY status`,
+      params
+    );
+
+    const byStatus = {
+      pending: 0,
+      processing: 0,
+      completed: 0,
+      cancelled: 0
+    };
+
+    statusResult.forEach(row => {
+      byStatus[row.status] = row.count;
+    });
+
+    // Obtener valor total
+    const [valueResult] = await pool.query(
+      `SELECT COALESCE(SUM(total), 0) as totalValue, 
+              COALESCE(AVG(total), 0) as avgValue 
+       FROM orders ${whereClause}`,
+      params
+    );
+
+    const totalValue = parseFloat(valueResult[0].totalValue || 0).toFixed(2);
+    const averageOrderValue = parseFloat(valueResult[0].avgValue || 0).toFixed(2);
+
     const stats = {
-      total: filteredOrders.length,
-      byStatus: {
-        pending: filteredOrders.filter(o => o.status === 'pending').length,
-        processing: filteredOrders.filter(o => o.status === 'processing').length,
-        completed: filteredOrders.filter(o => o.status === 'completed').length,
-        cancelled: filteredOrders.filter(o => o.status === 'cancelled').length
-      },
-      totalValue: filteredOrders.reduce((sum, o) => sum + (o.total || 0), 0).toFixed(2),
-      averageOrderValue: filteredOrders.length > 0 
-        ? (filteredOrders.reduce((sum, o) => sum + (o.total || 0), 0) / filteredOrders.length).toFixed(2)
-        : 0
+      total: total,
+      byStatus: byStatus,
+      totalValue: totalValue,
+      averageOrderValue: averageOrderValue
     };
 
     res.json(stats);
