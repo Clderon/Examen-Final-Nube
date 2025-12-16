@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: default
+
+resources:
+  - auth-deployment.yaml
+  - order-deployment.yaml
+  - rabbitmq.yaml
+  - worker.yaml
+  - frontend.yaml
+  - mysql.yaml
+
+commonLabels:
+  managed-by: kubernetes
+  environment: development
+
+commonAnnotations:
+  description: "Examen Final Nube - Microservicios con Kubernetes"
